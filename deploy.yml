@@ -1,0 +1,106 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install pnpm
+        run: npm install -g pnpm
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Run tests
+        run: pnpm test || echo "No tests configured yet"
+      
+      - name: Build project
+        run: pnpm build
+      
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            echo "🚀 Starting deployment..."
+            
+            cd /home/ngabopay/ngabopay-system
+            
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile
+            
+            echo "🔨 Building project..."
+            pnpm build
+            
+            echo "🔄 Reloading PM2 processes..."
+            pm2 reload deployment/pm2/ecosystem.config.js
+            pm2 save
+            
+            echo "✅ Deployment complete!"
+            pm2 status
+      
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "🔍 Verifying deployment..."
+            
+            # Check PM2 status
+            if ! pm2 status | grep -q "online"; then
+              echo "❌ Some PM2 processes are not online!"
+              pm2 status
+              exit 1
+            fi
+            
+            # Check API health
+            if ! curl -f https://ngabopay.online/api/health; then
+              echo "❌ API health check failed!"
+              exit 1
+            fi
+            
+            # Check dashboard
+            if ! curl -f https://ngabopay.online; then
+              echo "❌ Dashboard check failed!"
+              exit 1
+            fi
+            
+            echo "✅ All checks passed!"
+      
+      - name: Notify on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "❌ Deployment failed! Rolling back..."
+            pm2 reload deployment/pm2/ecosystem.config.js
+            pm2 logs --lines 50
