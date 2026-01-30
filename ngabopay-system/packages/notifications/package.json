@@ -1,0 +1,43 @@
+{
+  "name": "@ngabopay/notifications",
+  "version": "1.0.0",
+  "description": "WhatsApp and Telegram notification service for NgaboPay",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ngabopay",
+    "whatsapp",
+    "telegram",
+    "notifications",
+    "payments"
+  ],
+  "author": "NgaboPay Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ngabopay/ngabopay-system.git",
+    "directory": "packages/notifications"
+  }
+}
