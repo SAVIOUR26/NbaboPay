@@ -20,30 +20,69 @@ model Merchant {
   passwordHash     String
   businessName     String
   phone            String
-  country          String    // UG, KE, TZ
+  country          String    @default("UG")
   isActive         Boolean   @default(true)
   emailVerified    Boolean   @default(false)
   phoneVerified    Boolean   @default(false)
-  
-  // Binance integration
   binanceEmail     String?
   binanceSessionId String?   @unique
-  
-  // Timestamps
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   lastLoginAt      DateTime?
-  
-  // Relations
+
   orders           Order[]
   payouts          Payout[]
   wallets          Wallet[]
   sessions         BinanceSession[]
   apiKeys          ApiKey[]
-  
+  configs          SystemConfig[]
+  devices          AndroidDevice[]
+  transactions     Transaction[]
+
   @@index([email])
-  @@index([country])
   @@map("merchants")
+}
+
+// ============================================
+// SYSTEM CONFIGURATION (Settings from Dashboard)
+// ============================================
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  merchantId  String
+  configKey   String
+  configValue String   @db.Text
+  isEncrypted Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, configKey])
+  @@index([merchantId])
+  @@map("system_configs")
+}
+
+// ============================================
+// ANDROID DEVICE MANAGEMENT
+// ============================================
+
+model AndroidDevice {
+  id           String    @id @default(uuid())
+  merchantId   String
+  deviceId     String    @unique
+  deviceName   String?
+  isConnected  Boolean   @default(false)
+  lastSeenAt   DateTime?
+  fcmToken     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  merchant     Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("android_devices")
 }
 
 // ============================================
@@ -53,18 +92,17 @@ model Merchant {
 model Wallet {
   id            String   @id @default(uuid())
   merchantId    String
-  network       String   // TRC20, BSC, ETH
+  network       String
   address       String   @unique
   label         String?
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-  
+
   merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   deposits      CryptoDeposit[]
-  
+
   @@index([merchantId])
-  @@index([address])
   @@map("wallets")
 }
 
@@ -73,26 +111,23 @@ model Wallet {
 // ============================================
 
 model CryptoDeposit {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   walletId        String
-  txHash          String   @unique
+  txHash          String    @unique
   fromAddress     String
-  amount          Decimal  @db.Decimal(18, 8)
-  currency        String   // USDT, USDC, etc.
-  network         String   // TRC20, BSC, ETH
-  confirmations   Int      @default(0)
-  requiredConfs   Int      @default(20)
-  status          String   // pending, confirmed, processed, failed
-  
-  // Timestamps
-  detectedAt      DateTime @default(now())
+  amount          Decimal   @db.Decimal(18, 8)
+  currency        String
+  network         String
+  confirmations   Int       @default(0)
+  requiredConfs   Int       @default(20)
+  status          String    @default("pending")
+  detectedAt      DateTime  @default(now())
   confirmedAt     DateTime?
   processedAt     DateTime?
-  
-  wallet          Wallet   @relation(fields: [walletId], references: [id])
+
+  wallet          Wallet    @relation(fields: [walletId], references: [id])
   order           Order?
-  
-  @@index([txHash])
+
   @@index([walletId])
   @@index([status])
   @@map("crypto_deposits")
@@ -107,56 +142,41 @@ model Order {
   merchantId        String
   depositId         String?   @unique
   binanceOrderId    String?   @unique
-  orderReference    String    @unique // Human-readable reference
-  
-  // Crypto side
+  orderReference    String    @unique
   cryptoReceived    Decimal   @db.Decimal(18, 8)
-  cryptoCurrency    String    // USDT
-  cryptoNetwork     String    // TRC20, BSC
-  
-  // Fiat side
+  cryptoCurrency    String    @default("USDT")
+  cryptoNetwork     String    @default("TRC20")
   exchangeRate      Decimal   @db.Decimal(15, 4)
   rateLockedAt      DateTime?
   fiatAmount        Decimal   @db.Decimal(15, 2)
-  fiatCurrency      String    // UGX, KES, TZS
+  fiatCurrency      String    @default("UGX")
   feeAmount         Decimal   @db.Decimal(15, 2)
   feePercent        Decimal   @db.Decimal(5, 2)
   netPayout         Decimal   @db.Decimal(15, 2)
-  
-  // Customer information
   customerPhone     String
   customerEmail     String?
   customerName      String?
-  
-  // Status tracking
-  status            String    // pending, verified, approved, paid, completed, failed, cancelled
+  status            String    @default("pending")
   riskScore         Int       @default(0)
-  riskLevel         String    @default("low") // low, medium, high
-  fraudFlags        String[]  // Array of fraud indicators
-  
-  // Approval
+  riskLevel         String    @default("low")
+  fraudFlags        String[]
   requiresApproval  Boolean   @default(false)
-  approvedBy        String?   // Admin user ID
+  approvedBy        String?
   approvedAt        DateTime?
   rejectionReason   String?
-  
-  // Timestamps
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   verifiedAt        DateTime?
   completedAt       DateTime?
   failedAt          DateTime?
-  
-  // Relations
+
   merchant          Merchant  @relation(fields: [merchantId], references: [id])
   deposit           CryptoDeposit? @relation(fields: [depositId], references: [id])
   payout            Payout?
   logs              OrderLog[]
-  
+
   @@index([merchantId])
-  @@index([orderReference])
   @@index([status])
-  @@index([createdAt])
   @@map("orders")
 }
 
@@ -168,86 +188,97 @@ model Payout {
   id                String    @id @default(uuid())
   merchantId        String
   orderId           String    @unique
-  
   amount            Decimal   @db.Decimal(15, 2)
-  currency          String    // UGX, KES, TZS
-  provider          String    // AIRTEL, MTN, MPESA
+  currency          String
+  provider          String
   recipientPhone    String
   recipientName     String?
   reference         String    @unique
-  
-  // Status tracking
-  status            String    // queued, processing, completed, failed
-  transactionId     String?   // Provider transaction ID
-  confirmationSms   String?   // SMS confirmation text
-  providerResponse  Json?     // Full provider response
-  
-  // Retry logic
+  status            String    @default("queued")
+  transactionId     String?
+  confirmationSms   String?
+  providerResponse  Json?
   retryCount        Int       @default(0)
   maxRetries        Int       @default(3)
   lastRetryAt       DateTime?
-  
-  // Timestamps
   queuedAt          DateTime  @default(now())
   startedAt         DateTime?
   completedAt       DateTime?
   failedAt          DateTime?
-  
-  // Error tracking
   errorMessage      String?
   errorCode         String?
-  
-  // Relations
+
   merchant          Merchant  @relation(fields: [merchantId], references: [id])
   order             Order     @relation(fields: [orderId], references: [id])
-  
+
   @@index([merchantId])
-  @@index([orderId])
   @@index([status])
-  @@index([queuedAt])
   @@map("payouts")
 }
 
 // ============================================
-// BINANCE SESSION MANAGEMENT
+// BINANCE SESSION
 // ============================================
 
 model BinanceSession {
   id                String    @id @default(uuid())
   merchantId        String    @unique
-  sessionData       Json      // Encrypted session cookies & storage
+  sessionData       Json
   isValid           Boolean   @default(true)
   lastChecked       DateTime  @default(now())
   lastUsed          DateTime  @default(now())
   expiresAt         DateTime
   invalidReason     String?
-  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  
+
   merchant          Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  
-  @@index([merchantId])
-  @@index([expiresAt])
+
   @@map("binance_sessions")
 }
 
 // ============================================
-// ORDER ACTIVITY LOGS
+// TRANSACTION LOG (Mobile Money)
+// ============================================
+
+model Transaction {
+  id              String    @id @default(uuid())
+  merchantId      String
+  orderId         String?
+  type            String
+  amount          Decimal   @db.Decimal(15, 2)
+  currency        String
+  customerPhone   String?
+  status          String    @default("pending")
+  provider        String?
+  providerTxId    String?
+  ussdResponse    String?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  merchant        Merchant  @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("transactions")
+}
+
+// ============================================
+// ORDER LOGS
 // ============================================
 
 model OrderLog {
   id          String   @id @default(uuid())
   orderId     String
-  level       String   // info, warn, error
+  level       String
   message     String
   metadata    Json?
   createdAt   DateTime @default(now())
-  
+
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
+
   @@index([orderId])
-  @@index([createdAt])
   @@map("order_logs")
 }
 
@@ -257,84 +288,75 @@ model OrderLog {
 
 model SystemLog {
   id          String   @id @default(uuid())
-  level       String   // info, warn, error, critical
-  service     String   // binance-observer, blockchain-monitor, api, worker
+  level       String
+  service     String
   message     String
   metadata    Json?
   stackTrace  String?
   createdAt   DateTime @default(now())
-  
+
   @@index([service])
-  @@index([level])
-  @@index([createdAt])
   @@map("system_logs")
 }
 
 // ============================================
-// API KEYS (FOR PROGRAMMATIC ACCESS)
+// API KEYS
 // ============================================
 
 model ApiKey {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   merchantId  String
   name        String
-  keyHash     String   @unique // Hashed API key
-  keyPrefix   String   // First 8 chars for identification
-  isActive    Boolean  @default(true)
+  keyHash     String    @unique
+  keyPrefix   String
+  isActive    Boolean   @default(true)
   lastUsedAt  DateTime?
   expiresAt   DateTime?
-  permissions String[] // Array of permissions
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  
+  permissions String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
   @@index([merchantId])
-  @@index([keyHash])
   @@map("api_keys")
 }
 
 // ============================================
-// EXCHANGE RATES (CACHED)
+// EXCHANGE RATES
 // ============================================
 
 model ExchangeRate {
-  id          String   @id @default(uuid())
-  fromCurrency String  // USDT
-  toCurrency   String  // UGX, KES, TZS
-  rate         Decimal @db.Decimal(15, 4)
-  source       String  // binance-p2p, manual, api
-  isActive     Boolean @default(true)
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(15, 4)
+  source       String
+  isActive     Boolean  @default(true)
   validUntil   DateTime
-  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  
+
   @@unique([fromCurrency, toCurrency, source])
-  @@index([validUntil])
   @@map("exchange_rates")
 }
 
 // ============================================
-// AUDIT TRAIL
+// AUDIT LOGS
 // ============================================
 
 model AuditLog {
   id          String   @id @default(uuid())
-  userId      String?  // Merchant ID or admin ID
-  userType    String   // merchant, admin, system
-  action      String   // login, order_create, payout_approve, etc.
-  resource    String   // Order, Payout, Merchant, etc.
+  userId      String?
+  userType    String
+  action      String
+  resource    String
   resourceId  String?
-  changes     Json?    // Before/after values
+  changes     Json?
   ipAddress   String?
   userAgent   String?
-  
   createdAt   DateTime @default(now())
-  
+
   @@index([userId])
-  @@index([action])
-  @@index([createdAt])
   @@map("audit_logs")
 }

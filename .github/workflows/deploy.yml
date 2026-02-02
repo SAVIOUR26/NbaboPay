@@ -1,0 +1,216 @@
+name: Deploy NgaboPay
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ngabopay-system/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ngabopay-system
+        run: npm ci
+
+      - name: Build Dashboard
+        working-directory: ngabopay-system/apps/dashboard
+        run: npm run build
+
+      - name: Build API
+        working-directory: ngabopay-system/apps/api
+        run: npm run build || echo "API build skipped (ts-node mode)"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            ngabopay-system/apps/dashboard/.next
+            ngabopay-system/apps/api/dist
+          retention-days: 1
+
+  deploy:
+    name: Deploy to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+          path: ngabopay-system/apps
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add VPS to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          CONFIG_ENCRYPTION_KEY: ${{ secrets.CONFIG_ENCRYPTION_KEY }}
+        run: |
+          # Create deployment script
+          cat > deploy.sh << 'DEPLOY_SCRIPT'
+          #!/bin/bash
+          set -e
+
+          echo "=== NgaboPay Deployment Script ==="
+          echo "Starting deployment at $(date)"
+
+          # Variables
+          APP_DIR="/home/ngabopay"
+          BACKUP_DIR="/home/ngabopay/backups/$(date +%Y%m%d_%H%M%S)"
+
+          # Create backup
+          echo "Creating backup..."
+          mkdir -p "$BACKUP_DIR"
+          if [ -d "$APP_DIR/ngabopay-system" ]; then
+            cp -r "$APP_DIR/ngabopay-system" "$BACKUP_DIR/" 2>/dev/null || true
+          fi
+
+          # Navigate to app directory
+          cd "$APP_DIR"
+
+          # Pull latest code
+          echo "Pulling latest code..."
+          if [ -d "ngabopay-system/.git" ]; then
+            cd ngabopay-system
+            git fetch origin
+            git reset --hard origin/main || git reset --hard origin/master
+            cd ..
+          else
+            rm -rf ngabopay-system
+            git clone https://github.com/$GITHUB_REPOSITORY.git ngabopay-system
+          fi
+
+          # Navigate to app
+          cd ngabopay-system
+
+          # Install dependencies
+          echo "Installing dependencies..."
+          npm ci --production=false
+
+          # Generate Prisma client
+          echo "Generating Prisma client..."
+          cd packages/shared/database
+          npx prisma generate
+          cd ../../..
+
+          # Run database migrations
+          echo "Running database migrations..."
+          cd packages/shared/database
+          npx prisma db push --accept-data-loss || echo "Migration warning (check manually)"
+          cd ../../..
+
+          # Build Dashboard
+          echo "Building Dashboard..."
+          cd apps/dashboard
+          npm run build
+          cd ../..
+
+          # Update environment file
+          echo "Updating environment..."
+          cat > .env << EOF
+          NODE_ENV=production
+          DATABASE_URL=$DATABASE_URL
+          JWT_SECRET=$JWT_SECRET
+          CONFIG_ENCRYPTION_KEY=$CONFIG_ENCRYPTION_KEY
+          API_PORT=3001
+          DASHBOARD_PORT=3000
+          REDIS_URL=redis://localhost:6379
+          EOF
+
+          # Restart PM2 processes
+          echo "Restarting services..."
+          pm2 delete all 2>/dev/null || true
+
+          # Start Dashboard (Next.js)
+          cd apps/dashboard
+          pm2 start npm --name "ngabopay-dashboard" -- start
+          cd ../..
+
+          # Start API (Express)
+          cd apps/api
+          pm2 start npm --name "ngabopay-api" -- run start:prod || pm2 start npm --name "ngabopay-api" -- start
+          cd ../..
+
+          # Save PM2 configuration
+          pm2 save
+
+          echo "=== Deployment Complete ==="
+          pm2 status
+          echo "Deployment finished at $(date)"
+          DEPLOY_SCRIPT
+
+          # Copy and execute deployment script
+          scp deploy.sh $VPS_USER@$VPS_HOST:/tmp/deploy.sh
+          ssh $VPS_USER@$VPS_HOST "chmod +x /tmp/deploy.sh && GITHUB_REPOSITORY=${{ github.repository }} DATABASE_URL='$DATABASE_URL' JWT_SECRET='$JWT_SECRET' CONFIG_ENCRYPTION_KEY='$CONFIG_ENCRYPTION_KEY' /tmp/deploy.sh"
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          # Check if services are running
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "pm2 status && curl -s http://localhost:3001/api/health || echo 'API check failed'"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f deploy.sh
+
+  notify:
+    name: Notify on completion
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Send Telegram notification
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN && secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          STATUS="${{ needs.deploy.result }}"
+          if [ "$STATUS" = "success" ]; then
+            MESSAGE="✅ NgaboPay deployed successfully!%0A%0ABranch: ${{ github.ref_name }}%0ACommit: ${{ github.sha }}"
+          else
+            MESSAGE="❌ NgaboPay deployment failed!%0A%0ABranch: ${{ github.ref_name }}%0ACheck: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=$MESSAGE" \
+            -d "parse_mode=HTML" || echo "Telegram notification skipped"

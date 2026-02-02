@@ -105,6 +105,82 @@ class ApiClient {
   async getExchangeRates() {
     return this.request<{ rates: any[] }>('/exchange-rates');
   }
+
+  // Configuration
+  async getConfigs() {
+    return this.request<{ configs: any[] }>('/config');
+  }
+
+  async getConfig(key: string) {
+    return this.request<{ key: string; value: string; isEncrypted: boolean }>(`/config/${key}`);
+  }
+
+  async setConfig(key: string, value: string) {
+    return this.request<{ message: string }>(`/config/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async setBatchConfigs(configs: { key: string; value: string }[]) {
+    return this.request<{ message: string; count: number }>('/config/batch', {
+      method: 'POST',
+      body: JSON.stringify({ configs }),
+    });
+  }
+
+  async deleteConfig(key: string) {
+    return this.request<{ message: string }>(`/config/${key}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Telegram
+  async getTelegramStatus() {
+    return this.request<{ configured: boolean; botToken: string | null; chatId: string | null }>('/config/telegram/status');
+  }
+
+  async testTelegram() {
+    return this.request<{ success: boolean; message?: string; error?: string }>('/config/telegram/test', {
+      method: 'POST',
+    });
+  }
+
+  // Android Devices
+  async getDevices() {
+    return this.request<{ devices: any[] }>('/config/devices');
+  }
+
+  async registerDevice(data: { deviceId: string; deviceName?: string; fcmToken?: string }) {
+    return this.request<{ message: string; device: any }>('/config/devices/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeDevice(id: string) {
+    return this.request<{ message: string }>(`/config/devices/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Binance
+  async getBinanceStatus() {
+    return this.request<{ connected: boolean; lastChecked: string | null; expiresAt: string | null; invalidReason: string | null }>('/config/binance/status');
+  }
+
+  async saveBinanceSession(sessionData: any, expiresAt?: string) {
+    return this.request<{ message: string; expiresAt: string }>('/config/binance/session', {
+      method: 'POST',
+      body: JSON.stringify({ sessionData, expiresAt }),
+    });
+  }
+
+  async clearBinanceSession() {
+    return this.request<{ message: string }>('/config/binance/session', {
+      method: 'DELETE',
+    });
+  }
 }
 
 export const api = new ApiClient();
