@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Production builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables (CRITICAL - NEVER COMMIT!)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Binance sessions (SENSITIVE!)
+.binance-session/
+*-session.json
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+
+# Temporary
+.cache/
+.temp/
+.tmp/
+*.tmp
+
+# PM2
+.pm2/
+pm2.log
+
+# SSL Certificates (generated on VPS)
+*.pem
+*.key
+*.crt
+
+# Backups
+backups/
+*.backup
+*.sql.gz

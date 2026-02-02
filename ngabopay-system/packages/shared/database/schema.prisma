@@ -1,0 +1,362 @@
+// NgaboPay Database Schema
+// Prisma ORM configuration for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MERCHANT MANAGEMENT
+// ============================================
+
+model Merchant {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  businessName     String
+  phone            String
+  country          String    @default("UG")
+  isActive         Boolean   @default(true)
+  emailVerified    Boolean   @default(false)
+  phoneVerified    Boolean   @default(false)
+  binanceEmail     String?
+  binanceSessionId String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastLoginAt      DateTime?
+
+  orders           Order[]
+  payouts          Payout[]
+  wallets          Wallet[]
+  sessions         BinanceSession[]
+  apiKeys          ApiKey[]
+  configs          SystemConfig[]
+  devices          AndroidDevice[]
+  transactions     Transaction[]
+
+  @@index([email])
+  @@map("merchants")
+}
+
+// ============================================
+// SYSTEM CONFIGURATION (Settings from Dashboard)
+// ============================================
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  merchantId  String
+  configKey   String
+  configValue String   @db.Text
+  isEncrypted Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, configKey])
+  @@index([merchantId])
+  @@map("system_configs")
+}
+
+// ============================================
+// ANDROID DEVICE MANAGEMENT
+// ============================================
+
+model AndroidDevice {
+  id           String    @id @default(uuid())
+  merchantId   String
+  deviceId     String    @unique
+  deviceName   String?
+  isConnected  Boolean   @default(false)
+  lastSeenAt   DateTime?
+  fcmToken     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  merchant     Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("android_devices")
+}
+
+// ============================================
+// WALLET MANAGEMENT
+// ============================================
+
+model Wallet {
+  id            String   @id @default(uuid())
+  merchantId    String
+  network       String
+  address       String   @unique
+  label         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  deposits      CryptoDeposit[]
+
+  @@index([merchantId])
+  @@map("wallets")
+}
+
+// ============================================
+// CRYPTO DEPOSITS
+// ============================================
+
+model CryptoDeposit {
+  id              String    @id @default(uuid())
+  walletId        String
+  txHash          String    @unique
+  fromAddress     String
+  amount          Decimal   @db.Decimal(18, 8)
+  currency        String
+  network         String
+  confirmations   Int       @default(0)
+  requiredConfs   Int       @default(20)
+  status          String    @default("pending")
+  detectedAt      DateTime  @default(now())
+  confirmedAt     DateTime?
+  processedAt     DateTime?
+
+  wallet          Wallet    @relation(fields: [walletId], references: [id])
+  order           Order?
+
+  @@index([walletId])
+  @@index([status])
+  @@map("crypto_deposits")
+}
+
+// ============================================
+// ORDERS
+// ============================================
+
+model Order {
+  id                String    @id @default(uuid())
+  merchantId        String
+  depositId         String?   @unique
+  binanceOrderId    String?   @unique
+  orderReference    String    @unique
+  cryptoReceived    Decimal   @db.Decimal(18, 8)
+  cryptoCurrency    String    @default("USDT")
+  cryptoNetwork     String    @default("TRC20")
+  exchangeRate      Decimal   @db.Decimal(15, 4)
+  rateLockedAt      DateTime?
+  fiatAmount        Decimal   @db.Decimal(15, 2)
+  fiatCurrency      String    @default("UGX")
+  feeAmount         Decimal   @db.Decimal(15, 2)
+  feePercent        Decimal   @db.Decimal(5, 2)
+  netPayout         Decimal   @db.Decimal(15, 2)
+  customerPhone     String
+  customerEmail     String?
+  customerName      String?
+  status            String    @default("pending")
+  riskScore         Int       @default(0)
+  riskLevel         String    @default("low")
+  fraudFlags        String[]
+  requiresApproval  Boolean   @default(false)
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectionReason   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  verifiedAt        DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+
+  merchant          Merchant  @relation(fields: [merchantId], references: [id])
+  deposit           CryptoDeposit? @relation(fields: [depositId], references: [id])
+  payout            Payout?
+  logs              OrderLog[]
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("orders")
+}
+
+// ============================================
+// PAYOUTS
+// ============================================
+
+model Payout {
+  id                String    @id @default(uuid())
+  merchantId        String
+  orderId           String    @unique
+  amount            Decimal   @db.Decimal(15, 2)
+  currency          String
+  provider          String
+  recipientPhone    String
+  recipientName     String?
+  reference         String    @unique
+  status            String    @default("queued")
+  transactionId     String?
+  confirmationSms   String?
+  providerResponse  Json?
+  retryCount        Int       @default(0)
+  maxRetries        Int       @default(3)
+  lastRetryAt       DateTime?
+  queuedAt          DateTime  @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  failedAt          DateTime?
+  errorMessage      String?
+  errorCode         String?
+
+  merchant          Merchant  @relation(fields: [merchantId], references: [id])
+  order             Order     @relation(fields: [orderId], references: [id])
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("payouts")
+}
+
+// ============================================
+// BINANCE SESSION
+// ============================================
+
+model BinanceSession {
+  id                String    @id @default(uuid())
+  merchantId        String    @unique
+  sessionData       Json
+  isValid           Boolean   @default(true)
+  lastChecked       DateTime  @default(now())
+  lastUsed          DateTime  @default(now())
+  expiresAt         DateTime
+  invalidReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  merchant          Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@map("binance_sessions")
+}
+
+// ============================================
+// TRANSACTION LOG (Mobile Money)
+// ============================================
+
+model Transaction {
+  id              String    @id @default(uuid())
+  merchantId      String
+  orderId         String?
+  type            String
+  amount          Decimal   @db.Decimal(15, 2)
+  currency        String
+  customerPhone   String?
+  status          String    @default("pending")
+  provider        String?
+  providerTxId    String?
+  ussdResponse    String?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  merchant        Merchant  @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("transactions")
+}
+
+// ============================================
+// ORDER LOGS
+// ============================================
+
+model OrderLog {
+  id          String   @id @default(uuid())
+  orderId     String
+  level       String
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_logs")
+}
+
+// ============================================
+// SYSTEM LOGS
+// ============================================
+
+model SystemLog {
+  id          String   @id @default(uuid())
+  level       String
+  service     String
+  message     String
+  metadata    Json?
+  stackTrace  String?
+  createdAt   DateTime @default(now())
+
+  @@index([service])
+  @@map("system_logs")
+}
+
+// ============================================
+// API KEYS
+// ============================================
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  merchantId  String
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  permissions String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("api_keys")
+}
+
+// ============================================
+// EXCHANGE RATES
+// ============================================
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(15, 4)
+  source       String
+  isActive     Boolean  @default(true)
+  validUntil   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([fromCurrency, toCurrency, source])
+  @@map("exchange_rates")
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  userType    String
+  action      String
+  resource    String
+  resourceId  String?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@map("audit_logs")
+}
