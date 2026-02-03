@@ -40,8 +40,8 @@ export default function BinancePage() {
 
   const checkSessionStatus = async () => {
     try {
-      const response = await api.get('/api/binance/session-status');
-      setSessionStatus(response.data);
+      const response = await api.getBinanceSessionStatus();
+      setSessionStatus(response);
     } catch (error) {
       console.error('Failed to check session status:', error);
     }
@@ -51,8 +51,8 @@ export default function BinancePage() {
     setLoading(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/binance/launch-browser');
-      setBrowserUrl(response.data.browserUrl);
+      const response = await api.launchBinanceBrowser();
+      setBrowserUrl(response.browserUrl);
       setMessage({
         type: 'success',
         text: 'Browser launched! Open the VNC URL below to log in to Binance.',
@@ -61,7 +61,7 @@ export default function BinancePage() {
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to launch browser',
+        text: error.message || 'Failed to launch browser',
       });
     } finally {
       setLoading(false);
@@ -72,8 +72,8 @@ export default function BinancePage() {
     setLoading(true);
     setMessage(null);
     try {
-      const response = await api.post('/api/binance/check-login');
-      if (response.data.loggedIn) {
+      const response = await api.checkBinanceLogin();
+      if (response.isLoggedIn) {
         setMessage({
           type: 'success',
           text: 'Session saved successfully! You are now logged in.',
@@ -88,7 +88,7 @@ export default function BinancePage() {
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to check login status',
+        text: error.message || 'Failed to check login status',
       });
     } finally {
       setLoading(false);
@@ -99,7 +99,7 @@ export default function BinancePage() {
     setLoading(true);
     setMessage(null);
     try {
-      await api.post('/api/binance/start-monitoring', { fiatCurrency: 'UGX' });
+      await api.startBinanceMonitoring();
       setMessage({
         type: 'success',
         text: 'Monitoring started successfully!',
@@ -108,7 +108,7 @@ export default function BinancePage() {
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to start monitoring',
+        text: error.message || 'Failed to start monitoring',
       });
     } finally {
       setLoading(false);
@@ -119,7 +119,7 @@ export default function BinancePage() {
     setLoading(true);
     setMessage(null);
     try {
-      await api.post('/api/binance/stop-monitoring');
+      await api.stopBinanceMonitoring();
       setBrowserUrl(null);
       setMessage({
         type: 'success',
@@ -129,7 +129,7 @@ export default function BinancePage() {
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to stop monitoring',
+        text: error.message || 'Failed to stop monitoring',
       });
     } finally {
       setLoading(false);
@@ -139,8 +139,8 @@ export default function BinancePage() {
   const fetchRates = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/api/binance/rates?fiatCurrency=UGX');
-      setRates(response.data.rates);
+      const response = await api.getBinanceRates();
+      setRates(response.rates);
       setMessage({
         type: 'success',
         text: 'Rates fetched successfully!',
@@ -148,7 +148,7 @@ export default function BinancePage() {
     } catch (error: any) {
       setMessage({
         type: 'error',
-        text: error.response?.data?.error || 'Failed to fetch rates',
+        text: error.message || 'Failed to fetch rates',
       });
     } finally {
       setLoading(false);
