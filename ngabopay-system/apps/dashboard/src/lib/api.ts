@@ -181,6 +181,45 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Binance Browser Control
+  async launchBinanceBrowser() {
+    return this.request<{ browserUrl: string; sessionId: string; message: string }>('/binance/launch-browser', {
+      method: 'POST',
+    });
+  }
+
+  async checkBinanceLogin() {
+    return this.request<{ isLoggedIn: boolean; sessionId: string; message: string }>('/binance/check-login', {
+      method: 'POST',
+    });
+  }
+
+  async getBinanceSessionStatus() {
+    return this.request<{ isValid: boolean; lastChecked: string | null; expiresAt: string | null }>('/binance/session-status');
+  }
+
+  async startBinanceMonitoring() {
+    return this.request<{ message: string; status: string }>('/binance/start-monitoring', {
+      method: 'POST',
+    });
+  }
+
+  async stopBinanceMonitoring() {
+    return this.request<{ message: string }>('/binance/stop-monitoring', {
+      method: 'POST',
+    });
+  }
+
+  async getBinanceRates() {
+    return this.request<{ rates: any[]; timestamp: string }>('/binance/rates');
+  }
+
+  async closeBinanceBrowser() {
+    return this.request<{ message: string }>('/binance/close-browser', {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();
