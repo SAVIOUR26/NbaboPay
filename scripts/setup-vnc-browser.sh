@@ -35,31 +35,78 @@ echo -e "${GREEN}[4/7] Installing noVNC (Web VNC Client)...${NC}"
 apt-get install -y novnc python3-websockify
 
 echo -e "${GREEN}[5/7] Installing Chromium Browser...${NC}"
-apt-get install -y chromium-browser
+# Try chromium-browser first, fallback to chromium
+apt-get install -y chromium-browser 2>/dev/null || apt-get install -y chromium
 
 echo -e "${GREEN}[6/7] Installing dependencies...${NC}"
-apt-get install -y \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libwayland-client0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    xdg-utils
+# Detect Ubuntu version and use appropriate package names
+UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "22.04")
+if [[ $(echo "$UBUNTU_VERSION >= 24.04" | bc -l 2>/dev/null || echo "0") -eq 1 ]]; then
+    # Ubuntu 24.04+ uses t64 packages
+    apt-get install -y \
+        fonts-liberation \
+        libasound2t64 \
+        libatk-bridge2.0-0t64 \
+        libatk1.0-0t64 \
+        libatspi2.0-0t64 \
+        libcups2t64 \
+        libdbus-1-3 \
+        libdrm2 \
+        libgbm1 \
+        libgtk-3-0t64 \
+        libnspr4 \
+        libnss3 \
+        libwayland-client0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxkbcommon0 \
+        libxrandr2 \
+        xdg-utils || {
+            echo -e "${YELLOW}Warning: Some packages failed, trying without specific versions...${NC}"
+            apt-get install -y fonts-liberation libdbus-1-3 libdrm2 libgbm1 libnspr4 libnss3 \
+                libwayland-client0 libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils
+        }
+else
+    # Ubuntu 22.04 and older
+    apt-get install -y \
+        fonts-liberation \
+        libasound2 \
+        libatk-bridge2.0-0 \
+        libatk1.0-0 \
+        libatspi2.0-0 \
+        libcups2 \
+        libdbus-1-3 \
+        libdrm2 \
+        libgbm1 \
+        libgtk-3-0 \
+        libnspr4 \
+        libnss3 \
+        libwayland-client0 \
+        libxcomposite1 \
+        libxdamage1 \
+        libxfixes3 \
+        libxkbcommon0 \
+        libxrandr2 \
+        xdg-utils
+fi
 
-echo -e "${GREEN}[7/7] Creating systemd services...${NC}"
+echo -e "${GREEN}[7/8] Creating ngabopay user...${NC}"
+# Create user if it doesn't exist
+if ! id -u ngabopay >/dev/null 2>&1; then
+    useradd -r -m -s /bin/bash ngabopay
+    echo -e "${GREEN}User 'ngabopay' created${NC}"
+else
+    echo -e "${YELLOW}User 'ngabopay' already exists${NC}"
+fi
+
+# Create necessary directories
+mkdir -p /home/ngabopay/bin
+mkdir -p /home/ngabopay/binance-sessions
+mkdir -p /home/ngabopay/.chromium-profile
+chown -R ngabopay:ngabopay /home/ngabopay
+
+echo -e "${GREEN}[8/8] Creating systemd services...${NC}"
 
 # Create Xvfb service
 cat > /etc/systemd/system/xvfb.service <<'EOF'
@@ -117,7 +164,6 @@ WantedBy=multi-user.target
 EOF
 
 # Create Chromium launcher script
-mkdir -p /home/ngabopay/bin
 cat > /home/ngabopay/bin/launch-chromium.sh <<'EOF'
 #!/bin/bash
 export DISPLAY=:99
@@ -126,8 +172,18 @@ export DISPLAY=:99
 pkill -f chromium || true
 sleep 2
 
+# Detect chromium command (chromium-browser or chromium)
+if command -v chromium-browser &> /dev/null; then
+    CHROMIUM_CMD="chromium-browser"
+elif command -v chromium &> /dev/null; then
+    CHROMIUM_CMD="chromium"
+else
+    echo "Error: Chromium not found!"
+    exit 1
+fi
+
 # Launch Chromium with remote debugging
-chromium-browser \
+$CHROMIUM_CMD \
     --remote-debugging-port=9222 \
     --user-data-dir=/home/ngabopay/.chromium-profile \
     --no-first-run \
