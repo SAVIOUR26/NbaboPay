@@ -11,6 +11,9 @@ echo "Starting at $(date)"
 echo "Pulling latest code..."
 git pull origin main || git pull origin master
 
+# Navigate to the app folder
+cd ngabopay-system
+
 # Install dependencies
 echo "Installing dependencies..."
 npm install

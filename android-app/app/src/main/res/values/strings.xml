@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NgaboPay USSD</string>
+    <string name="accessibility_service_description">This service automates USSD responses for mobile money transfers. Enable this to allow automatic payout processing.</string>
+
+    <!-- Main Activity -->
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_processing">Processing...</string>
+
+    <!-- Buttons -->
+    <string name="btn_connect">Connect to Server</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_test_ussd">Test USSD</string>
+    <string name="btn_settings">Settings</string>
+
+    <!-- Settings -->
+    <string name="server_url">Server URL</string>
+    <string name="device_id">Device ID</string>
+    <string name="api_token">API Token</string>
+
+    <!-- Notifications -->
+    <string name="notification_channel_name">Payout Service</string>
+    <string name="notification_channel_description">Notifications for payout processing</string>
+    <string name="notification_title">NgaboPay Active</string>
+    <string name="notification_text">Monitoring for payout requests...</string>
+
+    <!-- Errors -->
+    <string name="error_no_accessibility">Please enable Accessibility Service</string>
+    <string name="error_no_permission">Required permissions not granted</string>
+    <string name="error_connection_failed">Connection to server failed</string>
+</resources>
