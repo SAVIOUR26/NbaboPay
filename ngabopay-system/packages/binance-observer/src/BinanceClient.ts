@@ -225,7 +225,7 @@ export class BinanceClient {
         createdAt: new Date(),
         lastUsed: new Date(),
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-        userAgent: await this.page?.evaluate(() => (window as any).navigator.userAgent) || '',
+        userAgent: this.page ? await this.page.evaluate('navigator.userAgent') : '',
         isValid: true,
       };
 
