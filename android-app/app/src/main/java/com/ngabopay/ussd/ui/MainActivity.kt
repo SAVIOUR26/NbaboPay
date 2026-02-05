@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
                 val registration = DeviceRegistration(
                     deviceId = prefs.getDeviceId(),
                     deviceName = "${Build.MANUFACTURER} ${Build.MODEL}",
-                    fcmToken = prefs.getFcmToken()
+                    appVersion = BuildConfig.VERSION_NAME
                 )
 
                 val response = ApiClient.getApi().registerDevice(registration)

@@ -2,28 +2,49 @@ package com.ngabopay.ussd.model
 
 import com.google.gson.annotations.SerializedName
 
-data class PayoutRequest(
-    @SerializedName("id") val id: String,
-    @SerializedName("orderId") val orderId: String?,
-    @SerializedName("amount") val amount: Double,
+// === Payout models (from /api/device/pending-payouts) ===
+
+data class PayoutInstruction(
+    @SerializedName("payoutId") val payoutId: String,
+    @SerializedName("orderId") val orderId: String,
+    @SerializedName("orderReference") val orderReference: String,
+    @SerializedName("amount") val amount: Int,
     @SerializedName("currency") val currency: String,
-    @SerializedName("customerPhone") val customerPhone: String,
+    @SerializedName("recipientPhone") val recipientPhone: String,
+    @SerializedName("ussdCode") val ussdCode: String,
     @SerializedName("provider") val provider: String,
-    @SerializedName("ussdFormat") val ussdFormat: String?,
-    @SerializedName("status") val status: String,
-    @SerializedName("createdAt") val createdAt: String
+    @SerializedName("retryCount") val retryCount: Int
 )
 
-data class PayoutResponse(
-    @SerializedName("success") val success: Boolean,
-    @SerializedName("message") val message: String?,
-    @SerializedName("transactionId") val transactionId: String?
+data class PendingPayoutsResponse(
+    @SerializedName("payouts") val payouts: List<PayoutInstruction>,
+    @SerializedName("count") val count: Int
 )
+
+data class PayoutCompleteRequest(
+    @SerializedName("transactionId") val transactionId: String?,
+    @SerializedName("confirmationMessage") val confirmationMessage: String?,
+    @SerializedName("ussdResponse") val ussdResponse: String?
+)
+
+data class PayoutFailRequest(
+    @SerializedName("errorMessage") val errorMessage: String,
+    @SerializedName("errorCode") val errorCode: String?,
+    @SerializedName("ussdResponse") val ussdResponse: String?
+)
+
+data class PayoutFailResponse(
+    @SerializedName("message") val message: String,
+    @SerializedName("willRetry") val willRetry: Boolean,
+    @SerializedName("retryCount") val retryCount: Int
+)
+
+// === Device models ===
 
 data class DeviceRegistration(
     @SerializedName("deviceId") val deviceId: String,
     @SerializedName("deviceName") val deviceName: String?,
-    @SerializedName("fcmToken") val fcmToken: String?
+    @SerializedName("appVersion") val appVersion: String?
 )
 
 data class DeviceRegistrationResponse(
@@ -38,22 +59,24 @@ data class Device(
     @SerializedName("isConnected") val isConnected: Boolean
 )
 
-data class PendingPayoutsResponse(
-    @SerializedName("payouts") val payouts: List<PayoutRequest>
+data class HeartbeatResponse(
+    @SerializedName("status") val status: String,
+    @SerializedName("timestamp") val timestamp: String
 )
 
-data class ConfigResponse(
-    @SerializedName("configs") val configs: List<ConfigItem>
+data class GenericResponse(
+    @SerializedName("message") val message: String
 )
 
-data class ConfigItem(
-    @SerializedName("configKey") val key: String,
-    @SerializedName("configValue") val value: String,
-    @SerializedName("isEncrypted") val isEncrypted: Boolean
+data class DeviceConfigResponse(
+    @SerializedName("configs") val configs: Map<String, String>
 )
+
+// === USSD result ===
 
 data class USSDResult(
     val success: Boolean,
     val message: String?,
-    val transactionId: String? = null
+    val transactionId: String? = null,
+    val screenLog: List<String> = emptyList()
 )
