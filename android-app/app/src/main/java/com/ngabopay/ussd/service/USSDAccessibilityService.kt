@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.ngabopay.ussd.NgaboPayApp
 import com.ngabopay.ussd.model.USSDResult
 import kotlinx.coroutines.*
 
@@ -15,8 +14,12 @@ class USSDAccessibilityService : AccessibilityService() {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var currentCallback: ((USSDResult) -> Unit)? = null
-    private var ussdMessages = mutableListOf<String>()
+    private val screenLog = mutableListOf<String>()
     private var isProcessing = false
+
+    // Multi-step USSD support
+    private val pendingSteps = mutableListOf<String>()
+    private var currentStepIndex = 0
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -45,24 +48,59 @@ class USSDAccessibilityService : AccessibilityService() {
         val source = event.source ?: return
 
         try {
-            // Find the message text in the USSD dialog
-            val messageNode = findNodeByClassName(source, "android.widget.TextView")
-            val message = messageNode?.text?.toString()
+            // Extract all text from the dialog
+            val messageText = extractDialogText(source)
 
-            if (!message.isNullOrBlank() && message.length > 5) {
-                Log.d(TAG, "USSD Message: $message")
-                ussdMessages.add(message)
+            if (!messageText.isNullOrBlank() && messageText.length > 3) {
+                Log.d(TAG, "USSD Screen: $messageText")
+                screenLog.add(messageText)
 
-                // Check for completion indicators
-                if (isTransactionComplete(message)) {
-                    val result = parseTransactionResult(message)
-                    completeUSSD(result)
+                // Check if this is a final success state
+                if (isTransactionComplete(messageText)) {
+                    val result = parseTransactionResult(messageText)
                     clickButton(source, "OK", "Cancel", "Done")
-                } else if (isErrorMessage(message)) {
-                    completeUSSD(USSDResult(false, message))
+                    completeUSSD(result)
+                    return
+                }
+
+                // Check if this is an error
+                if (isErrorMessage(messageText)) {
                     clickButton(source, "OK", "Cancel")
+                    completeUSSD(USSDResult(false, messageText, screenLog = screenLog.toList()))
+                    return
+                }
+
+                // Multi-step: if we have pending steps, input the next one
+                if (pendingSteps.isNotEmpty() && currentStepIndex < pendingSteps.size) {
+                    val nextInput = pendingSteps[currentStepIndex]
+                    currentStepIndex++
+
+                    Log.d(TAG, "Multi-step input $currentStepIndex/${pendingSteps.size}: $nextInput")
+
+                    // Find the input field and enter text
+                    val inputNode = findEditText(source)
+                    if (inputNode != null) {
+                        val args = Bundle()
+                        args.putCharSequence(
+                            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                            nextInput
+                        )
+                        inputNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                        inputNode.recycle()
+
+                        // Click Send after a brief delay
+                        scope.launch {
+                            delay(500)
+                            val root = rootInActiveWindow ?: return@launch
+                            clickButton(root, "Send", "OK", "Continue")
+                            root.recycle()
+                        }
+                    } else {
+                        // No input field visible - click Send/OK to proceed
+                        clickButton(source, "Send", "OK", "Continue")
+                    }
                 } else {
-                    // Auto-click OK/Send to continue the USSD session
+                    // No pending steps - auto-click to continue
                     clickButton(source, "Send", "OK", "Continue")
                 }
             }
@@ -73,14 +111,40 @@ class USSDAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun findNodeByClassName(root: AccessibilityNodeInfo, className: String): AccessibilityNodeInfo? {
-        if (root.className?.toString() == className && !root.text.isNullOrBlank()) {
+    /**
+     * Extract all text content from the USSD dialog
+     */
+    private fun extractDialogText(root: AccessibilityNodeInfo): String? {
+        val texts = mutableListOf<String>()
+        collectTextNodes(root, texts)
+        val combined = texts.joinToString("\n").trim()
+        return if (combined.isNotEmpty()) combined else null
+    }
+
+    private fun collectTextNodes(node: AccessibilityNodeInfo, texts: MutableList<String>) {
+        val text = node.text?.toString()
+        if (!text.isNullOrBlank() && node.className?.toString() == "android.widget.TextView") {
+            texts.add(text)
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectTextNodes(child, texts)
+            child.recycle()
+        }
+    }
+
+    /**
+     * Find an EditText input field in the dialog
+     */
+    private fun findEditText(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (root.className?.toString() == "android.widget.EditText") {
             return root
         }
 
         for (i in 0 until root.childCount) {
             val child = root.getChild(i) ?: continue
-            val result = findNodeByClassName(child, className)
+            val result = findEditText(child)
             if (result != null) return result
             child.recycle()
         }
@@ -126,7 +190,8 @@ class USSDAccessibilityService : AccessibilityService() {
             "transferred",
             "transaction id",
             "txn id",
-            "reference"
+            "reference",
+            "receipt"
         )
         return completionIndicators.any { message.lowercase().contains(it) }
     }
@@ -140,34 +205,48 @@ class USSDAccessibilityService : AccessibilityService() {
             "declined",
             "rejected",
             "not allowed",
-            "limit exceeded"
+            "limit exceeded",
+            "wrong pin",
+            "incorrect pin",
+            "blocked",
+            "service unavailable"
         )
         return errorIndicators.any { message.lowercase().contains(it) }
     }
 
     private fun parseTransactionResult(message: String): USSDResult {
-        // Try to extract transaction ID from message
-        val txnIdPattern = Regex("(?:txn|transaction|ref|reference)\\s*(?:id|no|number)?[:\\s]*([A-Z0-9]+)", RegexOption.IGNORE_CASE)
+        val txnIdPattern = Regex(
+            "(?:txn|transaction|ref|reference|receipt)\\s*(?:id|no|number)?[:\\s]*([A-Z0-9]+)",
+            RegexOption.IGNORE_CASE
+        )
         val match = txnIdPattern.find(message)
         val txnId = match?.groupValues?.getOrNull(1)
 
         return USSDResult(
             success = true,
             message = message,
-            transactionId = txnId
+            transactionId = txnId,
+            screenLog = screenLog.toList()
         )
     }
 
     private fun completeUSSD(result: USSDResult) {
         if (isProcessing) {
             isProcessing = false
+            pendingSteps.clear()
+            currentStepIndex = 0
             currentCallback?.invoke(result)
             currentCallback = null
-            ussdMessages.clear()
         }
     }
 
-    fun dialUSSD(ussdCode: String, callback: (USSDResult) -> Unit) {
+    /**
+     * Dial a USSD code with optional multi-step inputs.
+     *
+     * Single code mode: dialUSSD("*185*9*0781234567*50000*1234#")
+     * Multi-step mode:  dialUSSD("*185#", listOf("9", "0781234567", "50000", "1234", "1"))
+     */
+    fun dialUSSD(ussdCode: String, steps: List<String> = emptyList(), callback: (USSDResult) -> Unit) {
         if (isProcessing) {
             callback(USSDResult(false, "Another USSD is in progress"))
             return
@@ -175,11 +254,15 @@ class USSDAccessibilityService : AccessibilityService() {
 
         isProcessing = true
         currentCallback = callback
-        ussdMessages.clear()
+        screenLog.clear()
+        pendingSteps.clear()
+        pendingSteps.addAll(steps)
+        currentStepIndex = 0
+
+        Log.d(TAG, "Dialing USSD: $ussdCode, steps: ${steps.size}")
 
         scope.launch {
             try {
-                // Format USSD code for dialing
                 val encodedUssd = Uri.encode(ussdCode)
                 val intent = Intent(Intent.ACTION_CALL).apply {
                     data = Uri.parse("tel:$encodedUssd")
@@ -188,10 +271,15 @@ class USSDAccessibilityService : AccessibilityService() {
 
                 applicationContext.startActivity(intent)
 
-                // Timeout after 60 seconds
-                delay(60000)
+                // Timeout: 90s for multi-step, 60s for single
+                val timeout = if (steps.isNotEmpty()) 90_000L else 60_000L
+                delay(timeout)
                 if (isProcessing) {
-                    completeUSSD(USSDResult(false, "USSD timeout"))
+                    completeUSSD(USSDResult(
+                        false,
+                        "USSD timeout after ${timeout / 1000}s",
+                        screenLog = screenLog.toList()
+                    ))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error dialing USSD", e)

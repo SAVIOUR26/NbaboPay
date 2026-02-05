@@ -10,8 +10,9 @@ import androidx.core.app.NotificationCompat
 import com.ngabopay.ussd.NgaboPayApp
 import com.ngabopay.ussd.R
 import com.ngabopay.ussd.api.ApiClient
-import com.ngabopay.ussd.model.PayoutRequest
-import com.ngabopay.ussd.model.PayoutResponse
+import com.ngabopay.ussd.model.PayoutCompleteRequest
+import com.ngabopay.ussd.model.PayoutFailRequest
+import com.ngabopay.ussd.model.PayoutInstruction
 import com.ngabopay.ussd.ui.MainActivity
 import kotlinx.coroutines.*
 
@@ -58,8 +59,8 @@ class PayoutPollingService : Service() {
         pollingJob = scope.launch {
             while (isActive) {
                 try {
-                    checkForPendingPayouts()
                     sendHeartbeat()
+                    checkForPendingPayouts()
                 } catch (e: Exception) {
                     Log.e(TAG, "Polling error", e)
                 }
@@ -82,32 +83,33 @@ class PayoutPollingService : Service() {
                 if (payouts.isNotEmpty()) {
                     processPayout(payouts.first())
                 }
+            } else {
+                Log.w(TAG, "Failed to fetch payouts: ${response.code()}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to check pending payouts", e)
         }
     }
 
-    private suspend fun processPayout(payout: PayoutRequest) {
+    private suspend fun processPayout(payout: PayoutInstruction) {
         isProcessingPayout = true
-        Log.d(TAG, "Processing payout: ${payout.id}")
+        Log.d(TAG, "Processing payout: ${payout.payoutId} | ${payout.orderReference}")
+        Log.d(TAG, "Amount: ${payout.amount} ${payout.currency} -> ${payout.recipientPhone}")
 
         try {
-            val prefs = NgaboPayApp.instance.preferencesManager
-            val ussdFormat = payout.ussdFormat ?: prefs.getUssdFormat()
-            val pin = prefs.getMobileMoneyPin()
-
-            if (pin.isNullOrBlank()) {
-                reportPayoutFailure(payout.id, "Mobile Money PIN not configured")
-                return
+            // Mark payout as started on server
+            try {
+                ApiClient.getApi().startPayout(payout.payoutId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to mark payout as started", e)
             }
 
-            // Build USSD code from format
-            val ussdCode = ussdFormat
-                .replace("{phone}", payout.customerPhone)
-                .replace("{amount}", payout.amount.toInt().toString())
-                .replace("{pin}", pin)
-                .replace("{reference}", payout.orderId ?: payout.id)
+            val ussdCode = payout.ussdCode
+
+            if (ussdCode.isBlank()) {
+                reportPayoutFailure(payout.payoutId, "No USSD code provided", null)
+                return
+            }
 
             Log.d(TAG, "Dialing USSD: $ussdCode")
 
@@ -116,42 +118,73 @@ class PayoutPollingService : Service() {
                 USSDAccessibilityService.instance?.dialUSSD(ussdCode) { result ->
                     scope.launch {
                         if (result.success) {
-                            reportPayoutSuccess(payout.id, result.message, result.transactionId)
+                            reportPayoutSuccess(
+                                payout.payoutId,
+                                result.transactionId,
+                                result.message,
+                                result.screenLog.joinToString("\n---\n")
+                            )
                         } else {
-                            reportPayoutFailure(payout.id, result.message ?: "USSD failed")
+                            reportPayoutFailure(
+                                payout.payoutId,
+                                result.message ?: "USSD failed",
+                                result.screenLog.joinToString("\n---\n")
+                            )
                         }
+                    }
+                } ?: run {
+                    scope.launch {
+                        reportPayoutFailure(payout.payoutId, "USSD Service not available", null)
                     }
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing payout", e)
-            reportPayoutFailure(payout.id, e.message ?: "Unknown error")
+            reportPayoutFailure(payout.payoutId, e.message ?: "Unknown error", null)
         }
     }
 
-    private suspend fun reportPayoutSuccess(payoutId: String, message: String?, txnId: String?) {
+    private suspend fun reportPayoutSuccess(
+        payoutId: String,
+        transactionId: String?,
+        confirmationMessage: String?,
+        ussdResponse: String?
+    ) {
         try {
             ApiClient.getApi().completePayout(
                 payoutId,
-                PayoutResponse(success = true, message = message, transactionId = txnId)
+                PayoutCompleteRequest(
+                    transactionId = transactionId,
+                    confirmationMessage = confirmationMessage,
+                    ussdResponse = ussdResponse
+                )
             )
-            Log.d(TAG, "Payout completed: $payoutId")
+            Log.d(TAG, "Payout completed: $payoutId | txn: $transactionId")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to report success", e)
+            Log.e(TAG, "Failed to report payout success", e)
         } finally {
             isProcessingPayout = false
         }
     }
 
-    private suspend fun reportPayoutFailure(payoutId: String, reason: String) {
+    private suspend fun reportPayoutFailure(
+        payoutId: String,
+        reason: String,
+        ussdResponse: String?
+    ) {
         try {
-            ApiClient.getApi().failPayout(
+            val response = ApiClient.getApi().failPayout(
                 payoutId,
-                PayoutResponse(success = false, message = reason, transactionId = null)
+                PayoutFailRequest(
+                    errorMessage = reason,
+                    errorCode = null,
+                    ussdResponse = ussdResponse
+                )
             )
-            Log.d(TAG, "Payout failed: $payoutId - $reason")
+            val willRetry = response.body()?.willRetry ?: false
+            Log.d(TAG, "Payout failed: $payoutId - $reason (willRetry: $willRetry)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to report failure", e)
+            Log.e(TAG, "Failed to report payout failure", e)
         } finally {
             isProcessingPayout = false
         }
@@ -159,10 +192,7 @@ class PayoutPollingService : Service() {
 
     private suspend fun sendHeartbeat() {
         try {
-            val deviceDbId = NgaboPayApp.instance.preferencesManager.getRegisteredDeviceDbId()
-            if (deviceDbId != null) {
-                ApiClient.getApi().sendHeartbeat(deviceDbId)
-            }
+            ApiClient.getApi().sendHeartbeat()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send heartbeat", e)
         }

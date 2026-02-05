@@ -28,11 +28,19 @@ object ApiClient {
 
     private fun getRetrofit(): Retrofit {
         if (retrofit == null) {
-            val baseUrl = NgaboPayApp.instance.preferencesManager.getServerUrl()
-                ?: BuildConfig.API_BASE_URL
+            val prefs = NgaboPayApp.instance.preferencesManager
+            val serverUrl = prefs.getServerUrl() ?: BuildConfig.API_BASE_URL
+
+            // Ensure base URL ends with /api/
+            val baseUrl = when {
+                serverUrl.endsWith("/api/") -> serverUrl
+                serverUrl.endsWith("/api") -> "$serverUrl/"
+                serverUrl.endsWith("/") -> "${serverUrl}api/"
+                else -> "$serverUrl/api/"
+            }
 
             retrofit = Retrofit.Builder()
-                .baseUrl(if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/")
+                .baseUrl(baseUrl)
                 .client(getOkHttpClient())
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
@@ -50,16 +58,19 @@ object ApiClient {
         }
 
         val authInterceptor = Interceptor { chain ->
-            val token = NgaboPayApp.instance.preferencesManager.getApiToken()
-            val request = if (token != null) {
-                chain.request().newBuilder()
-                    .addHeader("Authorization", "Bearer $token")
-                    .addHeader("Content-Type", "application/json")
-                    .build()
-            } else {
-                chain.request()
+            val prefs = NgaboPayApp.instance.preferencesManager
+            val token = prefs.getApiToken()
+            val deviceId = prefs.getDeviceId()
+
+            val requestBuilder = chain.request().newBuilder()
+                .addHeader("Content-Type", "application/json")
+                .addHeader("X-Device-Id", deviceId)
+
+            if (token != null) {
+                requestBuilder.addHeader("Authorization", "Bearer $token")
             }
-            chain.proceed(request)
+
+            chain.proceed(requestBuilder.build())
         }
 
         return OkHttpClient.Builder()
