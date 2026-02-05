@@ -6,31 +6,34 @@ import retrofit2.http.*
 
 interface NgaboPayApi {
 
-    @POST("config/devices/register")
+    @POST("device/register")
     suspend fun registerDevice(
         @Body registration: DeviceRegistration
     ): Response<DeviceRegistrationResponse>
 
-    @POST("config/devices/{id}/heartbeat")
-    suspend fun sendHeartbeat(
-        @Path("id") deviceId: String
-    ): Response<Unit>
+    @POST("device/heartbeat")
+    suspend fun sendHeartbeat(): Response<HeartbeatResponse>
 
-    @GET("payouts/pending")
+    @GET("device/pending-payouts")
     suspend fun getPendingPayouts(): Response<PendingPayoutsResponse>
 
-    @POST("payouts/{id}/complete")
+    @POST("device/payout/{id}/start")
+    suspend fun startPayout(
+        @Path("id") payoutId: String
+    ): Response<GenericResponse>
+
+    @POST("device/payout/{id}/complete")
     suspend fun completePayout(
         @Path("id") payoutId: String,
-        @Body result: PayoutResponse
-    ): Response<Unit>
+        @Body result: PayoutCompleteRequest
+    ): Response<GenericResponse>
 
-    @POST("payouts/{id}/fail")
+    @POST("device/payout/{id}/fail")
     suspend fun failPayout(
         @Path("id") payoutId: String,
-        @Body result: PayoutResponse
-    ): Response<Unit>
+        @Body result: PayoutFailRequest
+    ): Response<PayoutFailResponse>
 
-    @GET("config")
-    suspend fun getConfigs(): Response<ConfigResponse>
+    @GET("device/config")
+    suspend fun getConfigs(): Response<DeviceConfigResponse>
 }

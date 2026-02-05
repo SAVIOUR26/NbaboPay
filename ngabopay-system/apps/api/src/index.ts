@@ -11,6 +11,7 @@ import walletRoutes from './routes/wallets';
 import payoutRoutes from './routes/payouts';
 import exchangeRateRoutes from './routes/exchange-rates';
 import configRoutes from './routes/config';
+import deviceRoutes from './routes/device';
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use('/api/wallets', walletRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/exchange-rates', exchangeRateRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/device', deviceRoutes);
 
 // 404 handler
 app.use((req, res) => {
