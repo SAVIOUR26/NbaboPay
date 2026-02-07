@@ -4,13 +4,9 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 
 interface SessionStatus {
-  hasSession: boolean;
   isValid: boolean;
-  isActive: boolean;
-  lastChecked?: string;
-  lastUsed?: string;
-  expiresAt?: string;
-  browserInfo?: any;
+  lastChecked: string | null;
+  expiresAt: string | null;
 }
 
 interface ExchangeRates {
@@ -181,19 +177,7 @@ export default function BinancePage() {
           {sessionStatus ? (
             <div className="space-y-2">
               <div className="flex items-center">
-                <span className="font-medium w-32">Has Session:</span>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    sessionStatus.hasSession
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {sessionStatus.hasSession ? 'Yes' : 'No'}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="font-medium w-32">Valid Session:</span>
+                <span className="font-medium w-32">Session:</span>
                 <span
                   className={`px-3 py-1 rounded-full text-sm ${
                     sessionStatus.isValid
@@ -204,23 +188,19 @@ export default function BinancePage() {
                   {sessionStatus.isValid ? 'Valid' : 'Not Valid'}
                 </span>
               </div>
-              <div className="flex items-center">
-                <span className="font-medium w-32">Browser Active:</span>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    sessionStatus.isActive
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {sessionStatus.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              {sessionStatus.lastUsed && (
+              {sessionStatus.lastChecked && (
                 <div className="flex items-center">
-                  <span className="font-medium w-32">Last Used:</span>
+                  <span className="font-medium w-32">Last Checked:</span>
                   <span className="text-gray-700">
-                    {new Date(sessionStatus.lastUsed).toLocaleString()}
+                    {new Date(sessionStatus.lastChecked).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {sessionStatus.expiresAt && (
+                <div className="flex items-center">
+                  <span className="font-medium w-32">Expires At:</span>
+                  <span className="text-gray-700">
+                    {new Date(sessionStatus.expiresAt).toLocaleString()}
                   </span>
                 </div>
               )}
@@ -237,18 +217,18 @@ export default function BinancePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={launchBrowser}
-              disabled={loading || sessionStatus?.isActive}
+              disabled={loading}
               className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition"
             >
-              {loading ? 'Launching...' : '🚀 Launch Browser'}
+              {loading ? 'Launching...' : 'Launch Browser'}
             </button>
 
             <button
               onClick={checkLogin}
-              disabled={loading || !sessionStatus?.isActive}
+              disabled={loading}
               className="bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition"
             >
-              {loading ? 'Checking...' : '✅ Check & Save Login'}
+              {loading ? 'Checking...' : 'Check & Save Login'}
             </button>
 
             <button
@@ -256,15 +236,15 @@ export default function BinancePage() {
               disabled={loading || !sessionStatus?.isValid}
               className="bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition"
             >
-              {loading ? 'Starting...' : '▶️ Start Monitoring'}
+              {loading ? 'Starting...' : 'Start Monitoring'}
             </button>
 
             <button
               onClick={stopMonitoring}
-              disabled={loading || !sessionStatus?.isActive}
+              disabled={loading}
               className="bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition"
             >
-              {loading ? 'Stopping...' : '⏹️ Stop Monitoring'}
+              {loading ? 'Stopping...' : 'Stop Monitoring'}
             </button>
           </div>
 
@@ -297,7 +277,7 @@ export default function BinancePage() {
               disabled={loading || !sessionStatus?.isValid}
               className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition"
             >
-              {loading ? 'Fetching...' : '🔄 Fetch Rates'}
+              {loading ? 'Fetching...' : 'Fetch Rates'}
             </button>
           </div>
 
