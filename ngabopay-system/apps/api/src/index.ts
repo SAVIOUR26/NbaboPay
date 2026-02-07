@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import path from 'path';
 import { config } from './config';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
@@ -17,7 +18,9 @@ import binanceRoutes from './routes/binance';
 const app = express();
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // Allow inline scripts for dashboard
+}));
 app.use(cors({
   origin: config.corsOrigins,
   credentials: true,
@@ -57,12 +60,19 @@ app.use('/api/config', configRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/binance', binanceRoutes);
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.method} ${req.path} not found`,
-  });
+// Serve static dashboard
+app.use(express.static(path.join(__dirname, '../public')));
+
+// Serve dashboard for all non-API routes (SPA fallback)
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+  } else {
+    res.status(404).json({
+      error: 'Not Found',
+      message: `Route ${req.method} ${req.path} not found`,
+    });
+  }
 });
 
 // Error handler
