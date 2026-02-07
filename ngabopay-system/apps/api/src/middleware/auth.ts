@@ -162,4 +162,7 @@ export const verifyToken = (token: string): JwtPayload | null => {
   }
 };
 
+// Alias for backward compatibility
+export { authenticate as authMiddleware };
+
 export default authenticate;
