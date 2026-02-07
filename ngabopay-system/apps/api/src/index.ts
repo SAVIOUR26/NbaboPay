@@ -69,7 +69,7 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // Start server
-const PORT = config.apiPort || 3000;
+const PORT = config.port || 3001;
 
 app.listen(PORT, () => {
   logger.info(`NgaboPay API server running on port ${PORT}`);
