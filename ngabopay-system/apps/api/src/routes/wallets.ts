@@ -10,7 +10,7 @@ router.use(authMiddleware);
 // GET /api/wallets - List wallets for merchant
 router.get('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const wallets = await prisma.wallet.findMany({
       where: { merchantId },
@@ -31,7 +31,7 @@ router.get('/', async (req, res, next) => {
 // POST /api/wallets - Create new wallet
 router.post('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { network, address, label } = req.body;
 
     if (!network || !address) {
@@ -83,7 +83,7 @@ router.post('/', async (req, res, next) => {
 // GET /api/wallets/:id - Get wallet details
 router.get('/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const wallet = await prisma.wallet.findFirst({
@@ -109,7 +109,7 @@ router.get('/:id', async (req, res, next) => {
 // PATCH /api/wallets/:id - Update wallet
 router.patch('/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
     const { label, isActive } = req.body;
 
@@ -141,7 +141,7 @@ router.patch('/:id', async (req, res, next) => {
 // DELETE /api/wallets/:id - Delete wallet
 router.delete('/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const wallet = await prisma.wallet.findFirst({

@@ -18,7 +18,7 @@ router.use(authMiddleware);
  */
 router.get('/session-status', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const session = await prisma.binanceSession.findUnique({
       where: { merchantId },
@@ -50,7 +50,7 @@ router.get('/session-status', async (req, res, next) => {
  */
 router.post('/launch-browser', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     // Create or update session record
     await prisma.binanceSession.upsert({
@@ -92,7 +92,7 @@ router.post('/launch-browser', async (req, res, next) => {
  */
 router.post('/check-login', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     // Mark session as valid for now (manual process)
     await prisma.binanceSession.upsert({
@@ -127,7 +127,7 @@ router.post('/check-login', async (req, res, next) => {
  */
 router.post('/start-monitoring', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     logger.info(`Monitoring start requested for merchant ${merchantId}`);
 
@@ -149,7 +149,7 @@ router.post('/start-monitoring', async (req, res, next) => {
  */
 router.post('/stop-monitoring', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     logger.info(`Monitoring stopped for merchant ${merchantId}`);
 

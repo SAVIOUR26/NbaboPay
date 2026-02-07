@@ -10,7 +10,7 @@ router.use(authMiddleware);
 // GET /api/payouts - List payouts for merchant
 router.get('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { status, page = '1', limit = '20' } = req.query;
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -59,7 +59,7 @@ router.get('/', async (req, res, next) => {
 // GET /api/payouts/:id - Get payout details
 router.get('/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const payout = await prisma.payout.findFirst({
@@ -82,7 +82,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/payouts/:id/confirm - Confirm payout was completed manually
 router.post('/:id/confirm', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
     const { transactionId, confirmationSms } = req.body;
 
@@ -142,7 +142,7 @@ router.post('/:id/confirm', async (req, res, next) => {
 // POST /api/payouts/:id/retry - Retry failed payout
 router.post('/:id/retry', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const payout = await prisma.payout.findFirst({
@@ -196,7 +196,7 @@ router.post('/:id/retry', async (req, res, next) => {
 // POST /api/payouts/:id/fail - Mark payout as failed
 router.post('/:id/fail', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
     const { errorMessage, errorCode } = req.body;
 

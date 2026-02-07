@@ -12,7 +12,7 @@ router.use(authMiddleware);
 // GET /api/orders - List orders for merchant
 router.get('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { status, page = '1', limit = '20' } = req.query;
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -60,7 +60,7 @@ router.get('/', async (req, res, next) => {
 // GET /api/orders/:id - Get order details
 router.get('/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const order = await prisma.order.findFirst({
@@ -88,7 +88,7 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/orders - Create new order (usually triggered by deposit detection)
 router.post('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const {
       cryptoAmount,
       cryptoCurrency = 'USDT',
@@ -165,7 +165,7 @@ router.post('/', async (req, res, next) => {
 // PATCH /api/orders/:id/status - Update order status
 router.patch('/:id/status', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
     const { status, note } = req.body;
 
@@ -231,7 +231,7 @@ router.patch('/:id/status', async (req, res, next) => {
 // POST /api/orders/:id/approve - Approve order for payout
 router.post('/:id/approve', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const order = await prisma.order.findFirst({
