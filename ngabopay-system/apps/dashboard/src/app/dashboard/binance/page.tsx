@@ -136,7 +136,10 @@ export default function BinancePage() {
     setLoading(true);
     try {
       const response = await api.getBinanceRates();
-      setRates(response.rates);
+      // Take first rate from array if available
+      if (response.rates && response.rates.length > 0) {
+        setRates(response.rates[0]);
+      }
       setMessage({
         type: 'success',
         text: 'Rates fetched successfully!',
