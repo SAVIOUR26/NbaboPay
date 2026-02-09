@@ -436,8 +436,8 @@
       const chatId = document.getElementById('telegram-chat-id').value;
 
       try {
-        await apiCall('/config/TELEGRAM_BOT_TOKEN', 'PUT', { value: botToken });
-        await apiCall('/config/TELEGRAM_CHAT_ID', 'PUT', { value: chatId });
+        await apiCall('/config/telegram_bot_token', 'PUT', { value: botToken });
+        await apiCall('/config/telegram_chat_id', 'PUT', { value: chatId });
         alert('Telegram settings saved!');
       } catch (err) {
         alert('Failed to save: ' + err.message);
@@ -461,9 +461,9 @@
       try {
         await apiCall('/config/batch', 'POST', {
           configs: [
-            { key: 'USSD_PROVIDER', value: provider },
-            { key: 'USSD_FORMAT', value: format },
-            { key: 'MOBILE_MONEY_PIN', value: pin }
+            { key: 'ussd_provider', value: provider },
+            { key: 'ussd_format', value: format },
+            { key: 'mobile_money_pin', value: pin }
           ]
         });
         alert('USSD settings saved!');

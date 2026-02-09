@@ -46,7 +46,7 @@ const SENSITIVE_KEYS = [
 // GET /api/config - Get all config for merchant
 router.get('/', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const configs = await prisma.systemConfig.findMany({
       where: { merchantId, isActive: true },
@@ -77,7 +77,7 @@ router.get('/', async (req, res, next) => {
 // GET /api/config/:key - Get specific config
 router.get('/:key', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { key } = req.params;
 
     const config = await prisma.systemConfig.findUnique({
@@ -106,7 +106,7 @@ router.get('/:key', async (req, res, next) => {
 // PUT /api/config/:key - Set config value
 router.put('/:key', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { key } = req.params;
     const { value } = req.body;
 
@@ -152,7 +152,7 @@ router.put('/:key', async (req, res, next) => {
 // POST /api/config/batch - Set multiple config values
 router.post('/batch', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { configs } = req.body;
 
     if (!configs || !Array.isArray(configs)) {
@@ -200,7 +200,7 @@ router.post('/batch', async (req, res, next) => {
 // DELETE /api/config/:key - Delete config
 router.delete('/:key', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { key } = req.params;
 
     const config = await prisma.systemConfig.findUnique({
@@ -240,7 +240,7 @@ router.delete('/:key', async (req, res, next) => {
 // GET /api/config/telegram/status - Check Telegram connection
 router.get('/telegram/status', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const botToken = await prisma.systemConfig.findUnique({
       where: {
@@ -273,7 +273,7 @@ router.get('/telegram/status', async (req, res, next) => {
 // POST /api/config/telegram/test - Send test message
 router.post('/telegram/test', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const botTokenConfig = await prisma.systemConfig.findUnique({
       where: {
@@ -330,7 +330,7 @@ router.post('/telegram/test', async (req, res, next) => {
 // GET /api/config/devices - List connected Android devices
 router.get('/devices', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const devices = await prisma.androidDevice.findMany({
       where: { merchantId },
@@ -346,7 +346,7 @@ router.get('/devices', async (req, res, next) => {
 // POST /api/config/devices/register - Register new Android device
 router.post('/devices/register', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { deviceId, deviceName, fcmToken } = req.body;
 
     if (!deviceId) {
@@ -385,7 +385,7 @@ router.post('/devices/register', async (req, res, next) => {
 // POST /api/config/devices/:id/heartbeat - Device heartbeat
 router.post('/devices/:id/heartbeat', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const device = await prisma.androidDevice.findFirst({
@@ -413,7 +413,7 @@ router.post('/devices/:id/heartbeat', async (req, res, next) => {
 // DELETE /api/config/devices/:id - Remove device
 router.delete('/devices/:id', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { id } = req.params;
 
     const device = await prisma.androidDevice.findFirst({
@@ -441,7 +441,7 @@ router.delete('/devices/:id', async (req, res, next) => {
 // GET /api/config/binance/status - Check Binance session status
 router.get('/binance/status', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const session = await prisma.binanceSession.findUnique({
       where: { merchantId },
@@ -461,7 +461,7 @@ router.get('/binance/status', async (req, res, next) => {
 // POST /api/config/binance/session - Save Binance session
 router.post('/binance/session', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
     const { sessionData, expiresAt } = req.body;
 
     if (!sessionData) {
@@ -500,7 +500,7 @@ router.post('/binance/session', async (req, res, next) => {
 // DELETE /api/config/binance/session - Clear Binance session
 router.delete('/binance/session', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     await prisma.binanceSession.deleteMany({
       where: { merchantId },

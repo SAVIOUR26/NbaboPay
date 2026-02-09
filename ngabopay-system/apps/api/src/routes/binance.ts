@@ -18,7 +18,7 @@ router.use(authMiddleware);
  */
 router.get('/session-status', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     const session = await prisma.binanceSession.findUnique({
       where: { merchantId },
@@ -45,12 +45,45 @@ router.get('/session-status', async (req, res, next) => {
 });
 
 /**
+ * GET /api/binance/monitoring-status
+ * Get current monitoring status
+ */
+router.get('/monitoring-status', async (req, res, next) => {
+  try {
+    const merchantId = req.user!.id;
+
+    const config = await prisma.systemConfig.findUnique({
+      where: {
+        merchantId_configKey: {
+          merchantId,
+          configKey: 'binance_monitor_active',
+        },
+      },
+    });
+
+    const session = await prisma.binanceSession.findUnique({
+      where: { merchantId },
+    });
+
+    res.json({
+      monitoringActive: config?.configValue === 'true',
+      sessionValid: session?.isValid || false,
+      lastChecked: session?.lastChecked || null,
+    });
+
+  } catch (error) {
+    logger.error('Error getting monitoring status:', error);
+    next(error);
+  }
+});
+
+/**
  * POST /api/binance/launch-browser
- * Launch browser placeholder - returns instructions
+ * Provides instructions for browser setup
  */
 router.post('/launch-browser', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     // Create or update session record
     await prisma.binanceSession.upsert({
@@ -71,12 +104,13 @@ router.post('/launch-browser', async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Browser control coming soon. For now, monitor Binance manually.',
+      message: 'Browser ready! The binance-monitor worker handles browser automation on the server.',
       instructions: [
-        'Open Binance P2P in your browser',
-        'Go to Orders > P2P Orders',
-        'When you see "Buyer Paid", process the payout manually',
-        'Full browser automation coming in next update',
+        '1. Ensure binance-monitor worker is running on the server (pm2 status)',
+        '2. The worker will use Playwright to monitor your Binance P2P orders',
+        '3. Click "Verify Login Status" after logging into Binance',
+        '4. Click "Start Monitoring" to enable automatic order detection',
+        '5. When "Buyer Paid" orders are detected, they will be processed automatically',
       ],
     });
 
@@ -92,7 +126,7 @@ router.post('/launch-browser', async (req, res, next) => {
  */
 router.post('/check-login', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
     // Mark session as valid for now (manual process)
     await prisma.binanceSession.upsert({
@@ -123,17 +157,52 @@ router.post('/check-login', async (req, res, next) => {
 
 /**
  * POST /api/binance/start-monitoring
- * Start monitoring placeholder
+ * Enable the Binance P2P monitoring worker
  */
 router.post('/start-monitoring', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
-    logger.info(`Monitoring start requested for merchant ${merchantId}`);
+    // Enable monitoring by setting the config flag
+    await prisma.systemConfig.upsert({
+      where: {
+        merchantId_configKey: {
+          merchantId,
+          configKey: 'binance_monitor_active',
+        },
+      },
+      create: {
+        merchantId,
+        configKey: 'binance_monitor_active',
+        configValue: 'true',
+        isEncrypted: false,
+      },
+      update: {
+        configValue: 'true',
+        updatedAt: new Date(),
+      },
+    });
+
+    // Also update the session to mark it as valid
+    await prisma.binanceSession.upsert({
+      where: { merchantId },
+      create: {
+        merchantId,
+        isValid: true,
+        lastChecked: new Date(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+      update: {
+        isValid: true,
+        lastChecked: new Date(),
+      },
+    });
+
+    logger.info(`Monitoring ENABLED for merchant ${merchantId}`);
 
     res.json({
       success: true,
-      message: 'Monitoring mode enabled',
+      message: 'Monitoring enabled! The worker will now scan for Binance P2P orders.',
       status: 'active',
     });
 
@@ -145,17 +214,37 @@ router.post('/start-monitoring', async (req, res, next) => {
 
 /**
  * POST /api/binance/stop-monitoring
- * Stop monitoring placeholder
+ * Disable the Binance P2P monitoring worker
  */
 router.post('/stop-monitoring', async (req, res, next) => {
   try {
-    const merchantId = req.merchantId!;
+    const merchantId = req.user!.id;
 
-    logger.info(`Monitoring stopped for merchant ${merchantId}`);
+    // Disable monitoring by setting the config flag
+    await prisma.systemConfig.upsert({
+      where: {
+        merchantId_configKey: {
+          merchantId,
+          configKey: 'binance_monitor_active',
+        },
+      },
+      create: {
+        merchantId,
+        configKey: 'binance_monitor_active',
+        configValue: 'false',
+        isEncrypted: false,
+      },
+      update: {
+        configValue: 'false',
+        updatedAt: new Date(),
+      },
+    });
+
+    logger.info(`Monitoring DISABLED for merchant ${merchantId}`);
 
     res.json({
       success: true,
-      message: 'Monitoring stopped',
+      message: 'Monitoring disabled. The worker will stop scanning for orders.',
     });
 
   } catch (error) {
